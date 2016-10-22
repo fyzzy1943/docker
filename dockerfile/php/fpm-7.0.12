@@ -1,0 +1,123 @@
+FROM debian:jessie
+MAINTAINER fyzzy1943@gmail.com
+
+RUN set -ex \
+    && { \
+        echo 'deb http://mirrors.aliyun.com/debian jessie main'; \
+        echo 'deb http://mirrors.aliyun.com/debian jessie-updates main'; \
+
+#        echo 'deb http://mirrors.aliyun.com/debian/ wheezy main non-free contrib'; \
+#        echo 'deb http://mirrors.aliyun.com/debian/ wheezy-proposed-updates main non-free contrib'; \
+#        echo 'deb-src http://mirrors.aliyun.com/debian/ wheezy main non-free contrib'; \
+#        echo 'deb-src http://mirrors.aliyun.com/debian/ wheezy-proposed-updates main non-free contrib'; \
+    } | tee /etc/apt/sources.list > /dev/null
+
+# 修改时区
+RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai  /etc/localtime
+
+RUN apt-get update && apt-get install -y \
+        autoconf \
+        file \
+        g++ \
+        gcc \
+        libc-dev \
+		make \
+        pkg-config \
+        re2c \
+        \
+        ca-certificates \
+        curl \
+        libedit2 \
+        libsqlite3-0 \
+        libxml2 \
+        xz-utils \
+        \
+        wget \
+        unzip \
+        \
+        libcurl4-openssl-dev \
+        libedit-dev \
+        libsqlite3-dev \
+        libssl-dev \
+        libxml2-dev \
+	&& rm -rf /var/lib/apt/lists/*
+
+RUN set -xe \
+    && cd /root \
+    && wget -O php.tar.xz http://cn2.php.net/get/php-7.0.12.tar.xz/from/this/mirror \
+    && tar -Jxf php.tar.xz
+
+RUN set -xe \
+    && cd /root/php-7.0.12 \
+    && ./configure \
+            --enable-fpm \
+            --with-fpm-user=www-data \
+            --with-fpm-group=www-data \
+            --enable-mysqlnd \
+            --with-mysqli=mysqlnd \
+            --with-pdo-mysql=mysqlnd \
+            --enable-mbstring \
+            --with-openssl \
+            --with-curl \
+    && make -j "$(nproc)" \
+    && make install
+
+RUN set -ex \
+    && cd /usr/local/etc \
+    && sed 's!=NONE/!=!g' php-fpm.conf.default | tee php-fpm.conf > /dev/null \
+    && cp php-fpm.d/www.conf.default php-fpm.d/www.conf \
+    && { \
+            echo '[global]'; \
+            echo 'error_log = /proc/self/fd/2'; \
+            echo; \
+            echo '[www]'; \
+            echo '; if we send this to /proc/self/fd/1, it never appears'; \
+            echo 'access.log = /proc/self/fd/2'; \
+            echo; \
+            echo 'clear_env = no'; \
+            echo; \
+            echo '; Ensure worker stdout and stderr are sent to the main error log.'; \
+            echo 'catch_workers_output = yes'; \
+        } | tee php-fpm.d/docker.conf > /dev/null \
+    && { \
+            echo '[global]'; \
+            echo 'daemonize = no'; \
+            echo; \
+            echo '[www]'; \
+            echo 'listen = [::]:9000'; \
+        } | tee php-fpm.d/zz-docker.conf > /dev/null
+
+RUN apt-get update && apt-get install -y \
+        libmemcached-dev \
+        zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN wget -O php-memcached.zip https://github.com/php-memcached-dev/php-memcached/archive/php7.zip \
+    && unzip -q php-memcached.zip \
+    && cd php-memcached-php7 \
+    && phpize \
+    && ./configure \
+    && make \
+    && make test \
+    && make install \
+    && cd /root && rm -rf *
+
+COPY composer.phar /root/
+
+RUN cd /root \
+    && ls /usr/local/bin \
+    && mv composer.phar /usr/local/bin/composer
+
+WORKDIR /usr/www
+
+EXPOSE 9000
+
+CMD ["php-fpm"]
+
+#RUN apt-get update && apt-get install -y libmemcached-dev zlib1g-dev wget unzip
+
+#RUN wget -O php-memcached.zip https://github.com/php-memcached-dev/php-memcached/archive/php7.zip
+
+#RUN unzip -q php-memcached.zip && cd php-memcached-php7 && phpize && ./configure && make && make test && make install
+
+#RUN docker-php-ext-configure --with-mysqli=mysqlnd --with-pdo-mysql=mysqlnd
