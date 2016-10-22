@@ -6,7 +6,7 @@ services:
     container_name: fy_web
     volumes:
       - ./conf/nginx.template:/etc/nginx/conf.d/mysite.template
-      - ./pma:/usr/www
+      - ./app:/usr/www
     ports:
       - '80:80'
     environment:
@@ -27,7 +27,7 @@ services:
     image: fyzzy1943/fpm:7.0.12
     container_name: fy_fpm
     volumes:
-      - ./pma:/usr/www
+      - ./app:/usr/www
       - ./conf/php.ini:/usr/local/lib/php.ini
     expose:
       - '9000'
